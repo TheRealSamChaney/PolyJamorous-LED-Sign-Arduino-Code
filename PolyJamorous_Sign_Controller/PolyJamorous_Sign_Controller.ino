@@ -286,7 +286,7 @@ void setup() {
 
 ////////////////////////////////////// POST-FUNCTION DECLARATIONS //////////////////////////////////
 typedef void (*SimplePatternList[])();
- SimplePatternList gPatterns = {PolyRhythm_2_3, POLY_JAM_R_US_2, ZoomIn, PolyRhythm_3_4, Bounce, Matrix, POLYJAMOROUS_SIMPLE, RainbowCircle, RainbowCircleDouble, ResetLEDs}; //POLYJAMOROUS_SIMPLE
+ SimplePatternList gPatterns = {Matrix, PolyRhythm_2_3, ZoomIn, PolyRhythm_3_4, Matrix, Bounce, RainbowCircleDouble, ResetLEDs}; //POLYJAMOROUS_SIMPLE
 //SimplePatternList gPatterns = {RainbowCircleDouble, RainbowCircle}; // Set gPatterns to just one or two for debugging. Comment out
 
 void nextPattern(){
