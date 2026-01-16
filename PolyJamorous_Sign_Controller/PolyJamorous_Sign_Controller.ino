@@ -5,7 +5,7 @@
 ////////////////////////////////////// DEFINE GLOBALS //////////////////////////////////////////////
 //////////////////////////////////////////////// ///////////////////////////////////////////////////
 
-#define DATA_PIN     2
+#define DATA_PIN     3  // Changed from pin 2 (damaged) to pin 3 (working)
 #define NUM_LEDS    62  //each "LED" is actually 3 physical LEDs or one segment
 #define BRIGHTNESS  255//Max is 255
 #define LED_TYPE    WS2811
@@ -71,13 +71,15 @@ Letter PolyJamorous[12] = {P,O1,L,Y,J,A,M,O2,R,O3,U,S};
 // all color DoLetterPalette(PolyJamorous[i], palettes[gCurrentPaletteTop], palettes[gCurrentPaletteBottom] ): CloudColors_p LavaColors_p OceanColors_p ForestColors_p RainbowColors_p RainbowStripeColors_p PartyColors_p HeatColors_p
 
 
-void DoLetterPalette(struct Letter letter, CRGBPalette16 paletteTop, CRGBPalette16 paletteBottom, uint8_t index){
-  for (uint8_t x=0; x<sizeof(letter.top); x++){
-    for (uint8_t y=0; y<sizeof(letter.bottom); y++){
-      letter.top = ColorFromPalette(paletteTop, gPaletteIndex, 255); //palette, index, brightness
-      letter.bottom = ColorFromPalette(paletteBottom, gPaletteIndex + gCurrentShiftBottom, 255);
-    }
-  }
+void DoLetterPalette(struct Letter& letter, CRGBPalette16 paletteTop, CRGBPalette16 paletteBottom, uint8_t index){
+  // CRGBSet has a fill_solid method that fills the entire set with one color
+  CRGB topColor = ColorFromPalette(paletteTop, gPaletteIndex, 255);
+  uint8_t bottomIndex = (uint8_t)(gPaletteIndex + gCurrentShiftBottom); // Prevent overflow
+  CRGB bottomColor = ColorFromPalette(paletteBottom, bottomIndex, 255);
+  
+  // Use CRGBSet's built-in fill_solid method
+  letter.top.fill_solid(topColor);
+  letter.bottom.fill_solid(bottomColor);
 }
 
 void PolyRhythm(uint8_t numer, uint8_t numerLeds[], uint8_t numerLength, uint8_t numerHue, uint8_t denom, uint8_t denomLeds[], uint8_t denomLength, uint8_t denomHue){
@@ -131,7 +133,7 @@ void POLYJAMOROUS_CHANT(){
 
 void POLY_JAM_R_US_2(){
     uint8_t sine = beatsin16( 50, 0, 5 ); //BEAT (bpm), MIN, MAX
-    uint8_t index = gPaletteIndexFunc + sine;
+    uint8_t index = (uint8_t)(gPaletteIndexFunc + sine); // Prevent overflow
     leds.fadeToBlackBy(10);
     EVERY_N_MILLISECONDS (60000/BPM) {gCurrentLetter = ( gCurrentLetter+1 ) % 4;}
     switch (gCurrentLetter) {
@@ -179,8 +181,8 @@ void RainbowCircleDouble(){
   Serial.println("RaibowCircleDouble ran!");
 
     fadeToBlackBy(leds, NUM_LEDS, 10);
-    leds[gCCW] = CHSV(gHue*6+150,255,255);
-    leds[gCW] = CHSV(gHue*6,255,255);
+    leds[gCCW] = CHSV(((gHue*6+150) % 256), 255, 255);
+    leds[gCW] = CHSV((gHue*6) % 256, 255, 255);
     if (gCCW == 0){
       gCCW = 61;
     }
@@ -198,8 +200,8 @@ void RainbowCircleDouble(){
 }
 
 void Matrix(){
-  uint8_t currentLetter = random(0,11);
-  EVERY_N_MILLISECONDS (400){currentLetter = random(0,11);}
+  uint8_t currentLetter = random(0,12); // Fixed: should be 0-11 (12 letters total)
+  EVERY_N_MILLISECONDS (400){currentLetter = random(0,12);}
   leds.fadeToBlackBy(10);
   DoLetterPalette(PolyJamorous[currentLetter], ForestColors_p, ForestColors_p, gPaletteIndex);
 }
@@ -216,12 +218,37 @@ void SinePaletteExplosion(){
 }
 
 void Bounce(){
-  uint8_t pos = beatsin16( BPM/2, 0, sizeof(Top) -1 );
+  // Speed control - lower number = slower movement
+  uint8_t speed = BPM/4;
+  
+  // Use a sin wave for natural bounce motion left and right
+  uint8_t pos = beatsin16( speed, 0, sizeof(Top) / sizeof(Top[0]) - 1 );
   leds.fadeToBlackBy(10);
   leds[ Top[pos] ] += CHSV(gHue*10,255,255);
 
-  uint8_t posBottom = beatsin16( BPM/2, 0, sizeof(Bottom) -1 );
-  leds[ Bottom[pos] ] += CHSV(gHue*10,255,255);
+  uint8_t posBottom = beatsin16( speed, 0, sizeof(Bottom) / sizeof(Bottom[0]) - 1 );
+  leds[ Bottom[posBottom] ] += CHSV(gHue*10,255,255); // Fixed: was using pos instead of posBottom
+}
+
+void BounceCool(){
+  // Speed control - lower number = slower movement
+  uint8_t motionSpeed = BPM/4;
+  uint8_t colorSpeed = BPM/3;  // Different speed for color to go out of sync with motion
+  
+  // Use a sin wave for natural bounce motion left and right (same for both top and bottom)
+  uint8_t pos = beatsin16( motionSpeed, 0, sizeof(Top) / sizeof(Top[0]) - 1 );
+  uint8_t posBottom = beatsin16( motionSpeed, 0, sizeof(Bottom) / sizeof(Bottom[0]) - 1 );
+  
+  // Cool colors: bounce between green (100) and 224 (purple, avoiding red at 255)
+  // Top starts at green (100), bottom is 180 degrees out of phase (starts at purple)
+  uint8_t coolHueTop = beatsin16( colorSpeed, 100, 224 );
+  // Invert the hue: when top is at green (100), bottom is at purple (224)
+  // Formula: bottom = 324 - top (stays in 100-224 range)
+  uint8_t coolHueBottom = 324 - coolHueTop;
+  
+  leds.fadeToBlackBy(10);
+  leds[ Top[pos] ] += CHSV(coolHueTop, 255, 255);
+  leds[ Bottom[posBottom] ] += CHSV(coolHueBottom, 255, 255);
 }
 
 void ZoomIn(){
@@ -230,12 +257,27 @@ void ZoomIn(){
     uint8_t topCenter = sizeof(Top)/2 -1;
     uint8_t bottomCenter = sizeof(Bottom)/2 + 2;
     uint8_t width = 12;
+    uint8_t topSize = sizeof(Top) / sizeof(Top[0]);
+    uint8_t bottomSize = sizeof(Bottom) / sizeof(Bottom[0]);
 
-    //light up LEDS with colors
-    leds[ Top[topCenter + gCounter] ] = CHSV(gHueFunc,255,255);
-    leds[ Bottom[bottomCenter + gCounter] ] = CHSV(gHueFunc,255,255);
-    leds[ Top[topCenter - gCounter -1 ] ]  = CHSV(gHueFunc,255,255);
-    leds[ Bottom[bottomCenter - gCounter - 5] ]  = CHSV(gHueFunc,255,255);
+    //light up LEDS with colors - with bounds checking
+    uint8_t topIdx1 = topCenter + gCounter;
+    uint8_t topIdx2 = (topCenter >= gCounter + 1) ? (topCenter - gCounter - 1) : 0;
+    uint8_t bottomIdx1 = bottomCenter + gCounter;
+    uint8_t bottomIdx2 = (bottomCenter >= gCounter + 5) ? (bottomCenter - gCounter - 5) : 0;
+    
+    if(topIdx1 < topSize) {
+      leds[ Top[topIdx1] ] = CHSV(gHueFunc,255,255);
+    }
+    if(topIdx2 < topSize) {
+      leds[ Top[topIdx2] ] = CHSV(gHueFunc,255,255);
+    }
+    if(bottomIdx1 < bottomSize) {
+      leds[ Bottom[bottomIdx1] ] = CHSV(gHueFunc,255,255);
+    }
+    if(bottomIdx2 < bottomSize) {
+      leds[ Bottom[bottomIdx2] ] = CHSV(gHueFunc,255,255);
+    }
   
     //first need to rein in gCounter, should only happen once
     if (gCounter > width){
@@ -245,21 +287,15 @@ void ZoomIn(){
     //now set the pattern. gCounter is incremented until it is equal to width
     if (gCounter == width){
       gCounter = 0;
-      gHueFunc = gHueFunc + 8; //change color drastically between zooms
+      gHueFunc = (gHueFunc + 8) % 256; //change color drastically between zooms
     }
     else{
       gCounter++;
     }
-    gHueFunc = gHueFunc + 5; //change color slightly between LEDS
+    gHueFunc = (gHueFunc + 5) % 256; //change color slightly between LEDS
     FastLED.delay(60000/BPM/width);
 }
 
-void ResetLEDs(){ // Sets all LEDs to black for a short time to try to fix the freezing issue
-  for(int i=0; i<NUM_LEDS; i++){
-    leds[i] = CRGB::Black;
-  }
-  delay(5000); // Wait 5 seconds
-}
 
 void Amor(){
 //  DoLetterPalette()
@@ -286,8 +322,8 @@ void setup() {
 
 ////////////////////////////////////// POST-FUNCTION DECLARATIONS //////////////////////////////////
 typedef void (*SimplePatternList[])();
- SimplePatternList gPatterns = {PolyRhythm_2_3, POLY_JAM_R_US_2, ZoomIn, PolyRhythm_3_4, Bounce, Matrix, POLYJAMOROUS_SIMPLE, RainbowCircle, RainbowCircleDouble, ResetLEDs}; //POLYJAMOROUS_SIMPLE
-//SimplePatternList gPatterns = {RainbowCircleDouble, RainbowCircle}; // Set gPatterns to just one or two for debugging. Comment out
+SimplePatternList gPatterns = {PolyRhythm_2_3, POLY_JAM_R_US_2, ZoomIn, PolyRhythm_3_4, Bounce, Matrix, POLYJAMOROUS_SIMPLE, RainbowCircle, RainbowCircleDouble, BounceCool}; //POLYJAMOROUS_SIMPLE
+// SimplePatternList gPatterns = {BounceCool}; // TEMPORARY: Only running single rainbow pattern for debugging
 
 void nextPattern(){
   // add one to the current pattern number, and wrap around at the end
